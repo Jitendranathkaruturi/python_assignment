@@ -1,0 +1,136 @@
+#import library numpy as np to call functions from the library
+import numpy as np
+import re
+#load_values function to load values assigned to each character or letter from the given file and return them in sorted order
+def load_values(value_file_path):
+    chars = []   #list to store the letters or characters of each word read from the given input file
+    char_values = [] #list to store corresponding values given in the values file
+#open the specified file to read the character/letter value pairs
+    with open(value_file_path) as file:
+        for line in file:
+            char, value = line.strip().split()  # Split each line into character and value
+            chars.append(char)                  # Append the character to the list
+            char_values.append(int(value))      # Append the integer value to the list
+# Create a dictionary mapping characters to their values and arrange it
+    char_value_dict = dict(zip(chars, char_values))
+    sorted_char_values = dict(sorted(char_value_dict.items(), key=lambda x: x[1]))
+
+    return sorted_char_values
+#function to find the least scored character in a word based on the given values
+def find_least_char(word, sorted_char_values):
+    least_char = None # Variable to store the least valuable character
+    least_char_score = float('inf') # Variable to store the score of the least valuable character
+    index_count = 0  # Variable to store the index count during iteration
+
+    for index, char in enumerate(word[1:], start=1): # Iterate through the characters in the word starting from the second character
+        index_count = index # Update the index count during each iteration
+
+        if char in sorted_char_values: # Check if the character is in the sorted character values
+            char_value = sorted_char_values[char] # Get the value of the current character
+# Update least_char if the current character has a lower value
+            if char_value < least_char_score or least_char is None:
+                least_char = char # Update the least valuable character
+                least_char_score = char_value + (index_count if index_count <= 2 else 3) #update the score
+#handling last character of the word
+                if least_char == word[-1]: #checks if the previously determined least valuable character is the same as the last character in the word
+                    for inner_index, inner_char in enumerate(word[1:-1], start=1): #The loop iterates through the characters in the word, excluding the first and last characters. This loop is designed to handle characters between the first and last characters.
+                        if inner_char in sorted_char_values and sorted_char_values[inner_char] < 5:
+                            least_char = inner_char
+                            least_char_score = sorted_char_values[inner_char] + (inner_index if inner_index <= 2 else 3) #If both conditions are true, it updates the least_char to be the current inner_char, and the least_char_score is updated based on the character's value plus a penalty or bonus depending on the position of the character in the word ((inner_index if inner_index <= 2 else 3)).
+#Special handling for characters with values above a threshold
+                elif sorted_char_values.get(least_char, 0) > 5 and word[-1] != 'E':
+                    least_char = word[-1]
+                    least_char_score = 5
+                elif sorted_char_values.get(least_char, 0) > 20 and word[-1] == 'E':
+                    least_char = word[-1]
+                    least_char_score = 20
+
+    return least_char, least_char_score, index_count
+# Function to find the least valuable character and score for each word in a name
+def find_least_score(name, sorted_char_values):
+    index_count = 0
+    least_char_tracker = {}
+    least_score_tracker = {}
+    name_parts = name.split()
+
+    for word in name_parts:
+        least_char, least_char_score, index_count = find_least_char(word, sorted_char_values)
+        least_score_tracker[word] = least_char_score
+        least_char_tracker[word] = least_char
+
+    return least_char_tracker, least_score_tracker
+#Function to generate an abbreviation and score for a given name
+def generate_abbreviation(name, sorted_char_values):
+    abb = '' # Variable to store the generated abbreviation
+    score = -1 # Variable to store the abbreviation's score
+    abbreviations_dict = {} # Dictionary to store abbreviations (not used in the function)
+    words = re.findall(r'[a-zA-Z]+', name.upper())
+ # Case: Single-word name
+    if len(words) == 1:
+        for word in words:
+            if len(word) < 3: # Handle abbreviations for single-word names based on length and last character
+                abb = ''
+                score = np.nan
+            elif len(word) == 3:
+                abb = word
+                score_of_mid_char = sorted_char_values[word[1]]
+                score = score_of_mid_char + (20 if abb[-1] == 'E' else 5)
+            elif len(word) > 3:
+                abb = word[0]
+                least_char, least_char_score, least_index_count = find_least_char(word, sorted_char_values)
+
+                if least_char == word[-1]:
+                    second_least_char, second_least_char_score, second_least_index_count = \
+                        find_least_char(word[:-1], sorted_char_values)
+                    abb += f"{second_least_char}{least_char}"
+                    score = least_char_score + second_least_char_score
+                else:
+                    second_least_char, second_least_char_score, second_least_index_count = \
+                        find_least_char(word.replace(least_char, ''), sorted_char_values)
+   # Determine the order of the two least valuable characters in the abbreviation                 
+                    abb += f"{second_least_char}{least_char}" if second_least_index_count < least_index_count else f"{least_char}{second_least_char}"
+                    score += least_char_score + second_least_char_score
+    elif len(words) >= 3:
+        # Case: Multi-word name
+        abb = ''.join(word[0] for word in words)[:3]
+        score = 0
+    elif len(words) == 2 and len(''.join(words)) == 3:
+        # Case: Two-word name with total length 3
+        abb = ''.join(words)
+        score = 20 if abb[-1] == 'E' else 5
+    elif len(words) == 2:
+        words = re.findall(r'[a-zA-Z]+', name.replace('-', ' ').upper())
+        abb += words[0][0]
+        least_char_tracker, least_score_tracker = find_least_score(name, sorted_char_values)
+        least_char_word = list(least_score_tracker.keys())[list(least_score_tracker.values()).index(
+            min(least_score_tracker.values()))]
+# Determine the order of the two least valuable characters in the abbreviation
+        if least_char_word == words[1]:
+            abb += f"{words[1][0]}{least_char_tracker[least_char_word]}"
+            score = least_score_tracker[least_char_word]
+        elif least_char_word == words[0]:
+            abb += f"{least_char_tracker[least_char_word]}{words[1][0]}"
+            score = least_score_tracker[least_char_word]
+    
+    return abb, score
+# Function to execute the program
+def main():
+    value_file_path = r'C:\Users\jiten\Downloads\python assignment\values.txt' # Path to the file containing values
+    sorted_char_values = load_values(value_file_path) # Load the sorted character values from the file
+# Prompt the user to enter the name of the input file (e.g., names.txt)
+    input_file = input("Enter the name of the input file (e.g., names.txt): ")
+    surname = input("Enter your surname: ")  # Prompt the user to enter their surname
+# Generate the output file name based on the surname and input file name
+    output_file_name = f"{surname.lower()}_{input_file[:-4]}_abbrevs.txt"
+    output_file_path = output_file_name
+# Open the input file for reading and the output file for writing
+    with open(input_file) as infile, open(output_file_path, 'w') as outfile: # Iterate through each line in the input file
+        for line in infile:
+            name = line.strip().upper().replace("'", "") # Process each name: strip leading/trailing spaces, convert to uppercase, and replace single quotes with an empty string
+            abbrev, score = generate_abbreviation(name, sorted_char_values) # Generate the abbreviation and score for the current name
+            outfile.write(name + '\n')  # Write the original name to the output file followed by the abbreviation (or an empty line if no abbreviation)
+            outfile.write(abbrev + '\n' if abbrev else '\n')
+#Checks if the script is being run as the main program.
+#Calls the main function if the script is being run as the main program, initiating the execution of the program.
+if __name__ == "__main__":
+    main()  
